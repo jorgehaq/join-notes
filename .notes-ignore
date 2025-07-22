@@ -1,0 +1,6 @@
+# Excluir carpetas completas
+proyectos/old-api
+experimentos/
+
+# Excluir archivo específico
+drafts/incompleto.md
