@@ -29,27 +29,63 @@ def cargar_ignorados(ruta_base):
                     ignorados.add(os.path.normpath(linea))
     return ignorados
 
-def recolectar_archivos_a_procesar(directorio_raiz, ignorados):
-    """Recolecta todos los archivos .md a procesar"""
+def coincide_con_patron(nombre_archivo, patron):
+    """Verifica si archivo coincide con extensión o patrón"""
+    nombre_lower = nombre_archivo.lower()
+    patron_lower = patron.lower()
+    
+    # Caso 1: Extensión normal (.md, .py, .txt)
+    if nombre_lower.endswith(patron_lower):
+        return True
+    
+    # Caso 2: Archivos especiales (.env -> .env.docker)
+    if patron_lower in ['.env', '.config'] and nombre_lower.startswith(patron_lower + '.'):
+        return True
+        
+    return False
+
+def recolectar_archivos_a_procesar(directorio_raiz, ignorados, extensiones):
+    """Recolecta archivos con las extensiones/patrones especificados"""
     archivos_a_procesar = []
     
+    print(f"🚀 Iniciando recorrido desde: {directorio_raiz}")
+    
     for carpeta_actual, subcarpetas, archivos in os.walk(directorio_raiz):
+        print(f"📁 Procesando carpeta: {carpeta_actual}")
+        print(f"   📂 Subcarpetas encontradas: {subcarpetas}")
+        print(f"   📄 Archivos encontrados: {archivos}")
+        
+        # Filtrar subcarpetas ignoradas
+        subcarpetas_originales = subcarpetas.copy()
         subcarpetas[:] = [sc for sc in subcarpetas if not debe_ignorar_carpeta(sc)]
+        if subcarpetas_originales != subcarpetas:
+            print(f"   🚫 Subcarpetas filtradas: {set(subcarpetas_originales) - set(subcarpetas)}")
         
         ruta_rel_carpeta = os.path.relpath(carpeta_actual, directorio_raiz)
+        print(f"   📍 Ruta relativa: {ruta_rel_carpeta}")
+        
         if ruta_rel_carpeta != "." and esta_ignorado(ruta_rel_carpeta, ignorados):
+            print("   ❌ Carpeta ignorada por .notes-ignore")
             continue
             
         for archivo in sorted(archivos):
-            if archivo.endswith(".md"):
+            print(f"      🔍 Evaluando archivo: {archivo}")
+            # NUEVO: verificar patrones además de extensiones
+            coincide = any(coincide_con_patron(archivo, ext) for ext in extensiones)
+            print(f"         ✅ Coincide con patrón: {coincide}")
+            
+            if coincide:
                 ruta_completa = os.path.join(carpeta_actual, archivo)
                 ruta_relativa = os.path.relpath(ruta_completa, directorio_raiz)
                 
                 if not esta_ignorado(ruta_relativa, ignorados):
                     archivos_a_procesar.append((ruta_completa, ruta_relativa, archivo))
+                    print(f"         ✅ AGREGADO: {archivo}")
+                else:
+                    print(f"         ❌ Ignorado por .notes-ignore: {archivo}")
     
+    print(f"🎯 Total archivos a procesar: {len(archivos_a_procesar)}")
     return archivos_a_procesar
-
 
 def debe_ignorar_carpeta(nombre_carpeta):
     """Ignora automáticamente carpetas comunes que no queremos"""
@@ -84,16 +120,36 @@ def esta_ignorado(path_relativo, ignorados):
 
     return False
 
-def concatenar_notas(directorio_raiz, salida):
+def concatenar_notas(directorio_raiz, salida, extensiones=None):
+    """
+    extensiones: lista de extensiones a incluir, ej: ['.md', '.py', '.txt']
+    Si es None, usa solo .md por defecto
+    """
+    if extensiones is None:
+        extensiones = ['.md']
+    
+    # Normalizar extensiones (agregar punto si falta)
+    extensiones_normalizadas = []
+    for ext in extensiones:
+        if not ext.startswith('.'):
+            ext = '.' + ext
+        extensiones_normalizadas.append(ext.lower())
+    
     if not os.path.exists(directorio_raiz):
         print(f"❌ Error: El directorio '{directorio_raiz}' no existe")
         return False
     
     ignorados = cargar_ignorados(directorio_raiz)
-    archivos_a_procesar = recolectar_archivos_a_procesar(directorio_raiz, ignorados)
+    archivos_a_procesar = recolectar_archivos_a_procesar(directorio_raiz, ignorados, extensiones_normalizadas)
+    
+    # DEBUG TEMPORAL
+    print(f"🔍 Extensiones buscadas: {extensiones_normalizadas}")
+    print(f"🔍 Directorio: {directorio_raiz}")
+    print(f"🔍 Archivos encontrados: {len(archivos_a_procesar)}")
     
     if not archivos_a_procesar:
-        print("⚠️  No se encontraron archivos .md para procesar")
+        extensiones_str = ', '.join(extensiones_normalizadas)
+        print(f"⚠️  No se encontraron archivos con extensiones: {extensiones_str}")
         return False
     
     print(f"📁 Procesando {len(archivos_a_procesar)} archivos...")
@@ -147,6 +203,12 @@ directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/A. STAGED/9. CLAUDE C
 directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/10. KAFKA PROYECTO/A.3. insights, arbol jerarquias tech"
 directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/10. KAFKA PROYECTO/0. STRUCTURE CODE"
 directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/3. AI-Powerred Data Processing"
+directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/A. OTROS/1. AXI - Client Analytics API"
+
+
 salida = "notas_concatenadas.md"
 
-concatenar_notas(directorio, salida)
+directorio = "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/3. AI-Powerred Data Processing"
+directorio = "/home/jorgehaq_vm/projects/backend/python/client-analytics-api"
+
+concatenar_notas(directorio, salida, ['md', 'py', 'txt', 'json', 'yml', 'Dockerfile', 'sh', '.env', '.dev', '.gcp'])
