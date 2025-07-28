@@ -1,0 +1,42 @@
+{
+  "projects": [
+    {
+      "project": "kafka-proyecto",
+      "description": "10. KAFKA PROYECTO",
+      "directorios": [
+        {
+          "path": "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/10. KAFKA PROYECTO/0. STRUCTURE CODE",
+          "activo": true,
+          "description": "codigo md insights"
+        },
+		{
+          "path": "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/10. KAFKA PROYECTO/0. STRUCTURE CODE",
+          "activo": false,
+          "description": "codigo python insights"
+        }
+      ]
+    },
+    {
+      "project": "axis",
+      "description": "1. AXI - Client Analytics API",
+      "directorios": [
+        {
+          "path": "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/1. AXI - Client Analytics API/A.3. insights, arbol jerarquias tech",
+          "activo": true,
+          "description": "Main architecture"
+        }
+      ]
+    },
+    {
+      "project": "ai-processing",
+      "description": "AI-Powered Data Processing",
+      "directorios": [
+        {
+          "path": "/home/jorgehaq_vm/gdrive_fast/NOTES/PROJECTS/B. HOT/3. AI-Powerred Data Processing",
+          "activo": true,
+          "description": "Complete project notes"
+        }
+      ]
+    }
+  ]
+}
