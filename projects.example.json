@@ -1,0 +1,73 @@
+{
+  "projects": [
+    {
+      "project": "enterprise-analysis",
+      "description": "Enterprise code analysis project",
+      "command": "python concat-notes.py enterprise-analysis --output complete-analysis.md",
+      "directorios": [
+        {
+          "path": "/home/your-user/projects/web-frontend/js",
+          "activo": true,
+          "description": "Frontend JavaScript files",
+          "command": "python concat-notes.py enterprise-analysis --output 'frontend-js.md' --extensions js"
+        },
+        {
+          "path": "/home/your-user/projects/web-backend/php",
+          "activo": false,
+          "description": "Backend PHP files",
+          "command": "python concat-notes.py enterprise-analysis --output 'backend.md' --extensions php sql"
+        },
+        {
+          "path": "/home/your-user/notes/documentation",
+          "activo": true,
+          "description": "Project documentation",
+          "command": "python concat-notes.py enterprise-analysis --output 'docs.md'"
+        }
+      ]
+    },
+    {
+      "project": "api-platform",
+      "description": "API platform analysis",
+      "command": "python concat-notes.py api-platform --output api-analysis.md",
+      "directorios": [
+        {
+          "path": "/home/your-user/projects/backend/python/fastapi-project",
+          "activo": true,
+          "description": "FastAPI implementation",
+          "command": "python concat-notes.py api-platform --output fastapi-analysis.md"
+        },
+        {
+          "path": "/home/your-user/projects/backend/python/django-project",
+          "activo": false,
+          "description": "Django implementation",
+          "command": "python concat-notes.py api-platform --output django-analysis.md"
+        }
+      ]
+    },
+    {
+      "project": "learning-roadmap",
+      "description": "Technical learning roadmap",
+      "command": "python concat-notes.py learning-roadmap --output 'my-roadmap.md'",
+      "directorios": [
+        {
+          "path": "/home/your-user/notes/LEARNING/PYTHON",
+          "activo": true,
+          "description": "Python learning notes",
+          "command": "python concat-notes.py learning-roadmap --output 'python-roadmap.md'"
+        },
+        {
+          "path": "/home/your-user/notes/LEARNING/CLOUD",
+          "activo": true,
+          "description": "Cloud platform notes",
+          "command": "python concat-notes.py learning-roadmap --output 'cloud-roadmap.md'"
+        },
+        {
+          "path": "/home/your-user/notes/LEARNING/FRAMEWORKS",
+          "activo": false,
+          "description": "Framework comparison notes",
+          "command": "python concat-notes.py learning-roadmap --output 'frameworks-roadmap.md'"
+        }
+      ]
+    }
+  ]
+}
