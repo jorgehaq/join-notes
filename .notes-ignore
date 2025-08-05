@@ -1,2 +1,3 @@
 # Excluir carpetas completas
 .venv/
+bbvaweb/php/util
