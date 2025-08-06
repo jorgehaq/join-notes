@@ -1,0 +1,129 @@
+# Notes Concatenator v2.0 - Project Configuration (Dummy)
+# Example file with sanitized paths and profiles
+
+projects:
+
+  # Example backend project
+  backend-example:
+    description: "Generic backend project"
+    base_paths:
+      - "/path/to/backend/projects"
+      - "/notes/backend"
+    
+    profiles:
+      fastapi:
+        pattern: "**/fastapi-*/**"
+        extensions: [".py", ".md", ".yml", ".json"]
+        output: "fastapi-analysis.md"
+        description: "FastAPI implementation files"
+      
+      django:
+        pattern: "**/django-*/**"
+        extensions: [".py", ".md", ".yml"]
+        output: "django-analysis.md"
+        description: "Django project files"
+      
+      infrastructure:
+        pattern: "**/{docker,k8s,terraform}/**"
+        extensions: [".yml", ".yaml", ".tf", ".dockerfile"]
+        output: "infrastructure.md"
+        description: "Infrastructure as code"
+
+  # Example data project
+  data-project:
+    description: "Data and analytics example project"
+    base_paths:
+      - "/path/to/data/projects"
+      - "/notes/data-science"
+    
+    profiles:
+      notebooks:
+        pattern: "**/notebooks/**"
+        extensions: [".ipynb", ".py", ".md"]
+        output: "analytics-notebooks.md"
+        description: "Jupyter notebooks and analysis"
+      
+      pipelines:
+        pattern: "**/pipelines/**"
+        extensions: [".py", ".yml", ".sql"]
+        output: "data-pipelines.md"
+        description: "Data processing pipelines"
+
+  # Example learning project
+  learning-materials:
+    description: "Learning and skills development"
+    base_paths:
+      - "/path/to/learning"
+      - "/tutorials"
+    
+    profiles:
+      python:
+        pattern: "**/python/**"
+        extensions: [".py", ".md", ".ipynb"]
+        output: "python-learning.md"
+        description: "Python learning materials"
+      
+      cloud:
+        pattern: "**/{aws,gcp,kubernetes}/**"
+        extensions: [".md", ".yml", ".tf"]
+        output: "cloud-learning.md"
+        description: "Cloud platform notes"
+      
+      architecture:
+        pattern: "**/architecture/**"
+        extensions: [".md", ".py", ".yml"]
+        output: "architecture-patterns.md"
+        description: "Software architecture patterns"
+
+  # Example enterprise project
+  enterprise-example:
+    description: "Enterprise example analysis"
+    base_paths:
+      - "/path/to/enterprise/projects"
+      - "/notes/enterprise"
+    
+    profiles:
+      backend:
+        pattern: "**/backend/**"
+        extensions: [".py", ".sql", ".md"]
+        output: "enterprise-backend.md"
+        description: "Backend patterns and analysis"
+      
+      frontend:
+        pattern: "**/frontend/**"
+        extensions: [".js", ".ts", ".jsx", ".md"]
+        output: "enterprise-frontend.md"
+        description: "Frontend patterns and analysis"
+      
+      architecture:
+        pattern: "**/architecture/**"
+        extensions: [".md", ".py", ".yml", ".json"]
+        output: "enterprise-architecture.md"
+        description: "System architecture documentation"
+
+  # Example client project
+  client-analytics-example:
+    description: "Client analytics dummy project"
+    base_paths:
+      - "/path/to/client-analytics"
+    
+    profiles:
+      current:
+        pattern: "**/client-analytics-async/**"
+        extensions: [".py", ".md", ".yml", ".sql"]
+        output: "client-analytics-current.md"
+        description: "Current async implementation"
+      
+      insights:
+        pattern: "**/insights/**"
+        extensions: [".py", ".ipynb", ".md"]
+        output: "client-insights.md"
+        description: "Analytics insights and reports"
+
+# Global configuration
+settings:
+  default_extensions: [".py", ".md", ".yml", ".json", ".sql"]
+  output_directory: "JOINED-NOTES"
+  max_file_size: 5
+  parallel_processing: true
+  max_workers: 4
