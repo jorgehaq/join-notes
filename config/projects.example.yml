@@ -1,0 +1,139 @@
+
+# Notes Concatenator v2.0 - Project Configuration
+# This file defines how to discover and concatenate files from your projects
+
+projects:
+
+  # Modern Python backend projects
+  api-platform:
+    description: "FastAPI/Django backend analysis"
+    base_paths:
+      - "~/projects/backend/python"
+      - "~/notes/api-development"
+    
+    profiles:
+      fastapi:
+        pattern: "**/fastapi-*/**"
+        extensions: [".py", ".md", ".yml", ".json"]
+        output: "fastapi-analysis.md"
+        description: "FastAPI implementation files"
+      
+      django:
+        pattern: "**/django-*/**"  
+        extensions: [".py", ".md", ".yml"]
+        output: "django-analysis.md"
+        description: "Django project files"
+      
+      infrastructure:
+        pattern: "**/{docker,k8s,terraform}/**"
+        extensions: [".yml", ".yaml", ".tf", ".dockerfile"]
+        output: "infrastructure.md"
+        description: "Infrastructure as code"
+
+  # Data analytics and ML projects  
+  data-analytics:
+    description: "Data science and analytics projects"
+    base_paths:
+      - "~/projects/analytics"
+      - "~/notes/data-science"
+    
+    profiles:
+      notebooks:
+        pattern: "**/notebooks/**"
+        extensions: [".ipynb", ".py", ".md"]
+        output: "analytics-notebooks.md"
+        description: "Jupyter notebooks and analysis"
+      
+      pipelines:
+        pattern: "**/pipelines/**"
+        extensions: [".py", ".yml", ".sql"]
+        output: "data-pipelines.md"
+        description: "Data processing pipelines"
+
+  # Learning and skill development
+  learning-roadmap:
+    description: "Technical learning and skill development"
+    base_paths:
+      - "~/notes/learning"
+      - "~/tutorials"
+    
+    profiles:
+      python:
+        pattern: "**/python/**"
+        extensions: [".py", ".md", ".ipynb"]
+        output: "python-learning.md"
+        description: "Python learning materials"
+      
+      cloud:
+        pattern: "**/{aws,gcp,kubernetes}/**"
+        extensions: [".md", ".yml", ".tf"]
+        output: "cloud-learning.md"
+        description: "Cloud platform notes"
+      
+      architecture:
+        pattern: "**/architecture/**"
+        extensions: [".md", ".py", ".yml"]
+        output: "architecture-patterns.md"
+        description: "Software architecture patterns"
+
+  # Enterprise analysis (sanitized)
+  enterprise-analysis:
+    description: "Enterprise codebase analysis and patterns"
+    base_paths:
+      - "~/work/analysis"
+      - "~/notes/enterprise"
+    
+    profiles:
+      backend:
+        pattern: "**/backend/**"
+        extensions: [".py", ".sql", ".md"]
+        output: "enterprise-backend.md"
+        description: "Backend patterns and analysis"
+      
+      frontend:
+        pattern: "**/frontend/**"
+        extensions: [".js", ".ts", ".jsx", ".md"]
+        output: "enterprise-frontend.md"
+        description: "Frontend patterns and analysis"
+      
+      architecture:
+        pattern: "**/architecture/**"
+        extensions: [".md", ".py", ".yml", ".json"]
+        output: "enterprise-architecture.md"
+        description: "System architecture documentation"
+
+  # Client project analysis
+  client-analytics:
+    description: "Client analytics and insights platform"
+    base_paths:
+      - "~/projects/client-analytics"
+    
+    profiles:
+      current:
+        pattern: "**/client-analytics-async/**"
+        extensions: [".py", ".md", ".yml", ".sql"]
+        output: "client-analytics-current.md"
+        description: "Current async implementation"
+      
+      insights:
+        pattern: "**/insights/**"
+        extensions: [".py", ".ipynb", ".md"]
+        output: "client-insights.md"
+        description: "Analytics insights and reports"
+
+# Global configuration
+settings:
+  # Default extensions if not specified in profile
+  default_extensions: [".py", ".md", ".yml", ".json", ".sql"]
+  
+  # Output directory for concatenated files
+  output_directory: "JOINED-NOTES"
+  
+  # Maximum file size to process (in MB)
+  max_file_size: 5
+  
+  # Enable parallel processing
+  parallel_processing: true
+  
+  # Number of worker threads
+  max_workers: 4

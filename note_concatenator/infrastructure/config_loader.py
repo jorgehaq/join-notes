@@ -6,7 +6,7 @@ Handles loading and parsing of YAML configuration files.
 
 import yaml
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from ..domain.entities import ProjectConfiguration, Project, ProjectProfile
 

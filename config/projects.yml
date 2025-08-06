@@ -1,0 +1,39 @@
+
+# Notes Concatenator v2.0 - Project Configuration
+# This file defines how to discover and concatenate files from your projects
+
+projects:
+
+  # Jorge 
+  real-time-test:
+    description: "FastAPI/Django backend analysis"
+    base_paths:
+      - "~/gdrive_fast/NOTES/NEW/2. PROYECTO"
+      - "~/projects/backend/python/"
+    
+    profiles:
+      insights:
+        pattern: "**/*real-time-analytics-pipeline-INSIGHTS*/**"
+        extensions: [".py", ".md", ".yml", ".json"]
+        output: "insights.md"
+        description: "realtime api insights"
+      
+      django:
+        pattern: "**/django-*/**"  
+        extensions: [".py", ".md", ".yml"]
+        output: "django-analysis.md"
+        description: "Django project files"
+      
+      infrastructure:
+        pattern: "**/{docker,k8s,terraform}/**"
+        extensions: [".yml", ".yaml", ".tf", ".dockerfile"]
+        output: "infrastructure.md"
+        description: "Infrastructure as code"
+
+# Global settings
+settings:
+  default_extensions: [".py", ".md", ".yml"]
+  output_directory: "JOINED-NOTES"
+  max_file_size: 5
+  parallel_processing: true
+  max_workers: 4
