@@ -1,3 +1,97 @@
-# Excluir carpetas completas
+
+# ============= GLOBAL PATTERNS (always ignore) =============
+
+# Virtual environments and dependencies
 .venv/
-bbvaweb/php/util
+__pycache__/
+node_modules/
+.git/
+.pytest_cache/
+dist/
+build/
+
+# Temporary and backup files
+*.tmp
+*.log
+*.backup
+*~
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ============= PROJECT-SPECIFIC PATTERNS =============
+
+# Legacy web projects - ignore problematic paths
+**/legacy/**                  # Legacy codebases
+**/deprecated/**              # Deprecated modules
+**/vendor/**                  # Third-party dependencies
+**/cache/**                   # Cache directories
+**/logs/**                    # Log files
+**/*.min.js                   # Minified files
+**/*.min.css                  # Minified stylesheets
+
+# FastAPI/Django projects - modern Python stack
+**/migrations/**              # Database migrations
+**/staticfiles/**             # Collected static files
+**/media/**                   # User uploaded files
+**/__pycache__/**             # Python cache
+**/celery-beat-schedule       # Celery scheduler
+
+# Analytics and data science projects
+**/raw-data/**                # Raw datasets
+**/processed-data/**          # Processed datasets
+**/*.csv                      # Large CSV files
+**/*.parquet                  # Parquet data files
+**/models/**/*.pkl            # Saved ML models
+**/notebooks/.ipynb_checkpoints/  # Jupyter checkpoints
+
+# Cloud and infrastructure
+**/terraform/.terraform/      # Terraform state
+**/.env.local                 # Local environment vars
+**/.env.production            # Production secrets
+**/docker-data/**            # Docker volume data
+
+# insides
+**/real-time-analytics-pipeline-INSIGHTS/app/models/
+
+
+# ============= PATTERN RULES =============
+
+# Ignore large binary files (implement size check in code)
+# >5MB automatically ignored
+
+# Binary and compressed files
+*.pdf
+*.docx
+*.xlsx
+*.zip
+*.tar.gz
+*.dmg
+*.iso
+
+# Output and generated content
+*/output/
+*/results/
+*/generated/
+*/exports/
+*_analysis.md                 # Generated analysis files
+*_concatenated.md             # Concatenated output
+*_report.md                   # Generated reports
+
+# ============= CONDITIONAL PATTERNS =============
+# [project:enterprise-analysis]
+# legacy/
+# archived/
+
+# [project:api-platform] 
+# test-fixtures/
+# mock-data/
+
+# [project:cloud-native]
+# helm-charts/values-*.yaml
+# k8s-configs/secrets/

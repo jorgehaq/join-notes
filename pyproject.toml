@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "note-concatenator"
+version = "2.0.0"
+description = "Modern file concatenation tool with auto-discovery and clean architecture"
+authors = [
+    {name = "Jorge", email = "your-email@example.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+keywords = ["files", "concatenation", "notes", "documentation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers", 
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# Dependencias principales
+dependencies = [
+    "click>=8.1.0",           # CLI moderno
+    "pydantic>=2.0.0",        # Validación de datos
+    "pyyaml>=6.0",            # Parsing YAML
+    "rich>=13.0.0",           # Output colorido
+    "pathlib2>=2.3.0",       # Path handling mejorado
+]
+
+# Dependencias opcionales para desarrollo
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",         # Testing
+    "pytest-asyncio>=0.21.0", # Async testing
+    "black>=23.0.0",          # Code formatting
+    "ruff>=0.1.0",            # Linting rápido
+    "mypy>=1.0.0",            # Type checking
+]
+
+# Definir comandos CLI
+[project.scripts]
+notes-concat = "note_concatenator.cli.main:cli"
+nc = "note_concatenator.cli.main:cli"  # Alias corto
+
+# URLs del proyecto
+[project.urls]
+Homepage = "https://github.com/jorgehaq/notes-concatenator"
+Repository = "https://github.com/jorgehaq/notes-concatenator.git"
+Issues = "https://github.com/jorgehaq/notes-concatenator/issues"
+
+# Configuración de herramientas de desarrollo
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings  
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

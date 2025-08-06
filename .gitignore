@@ -1,3 +1,83 @@
-projects.json
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Development tools
+.ruff_cache/
+
+# Project specific
 JOINED-NOTES/
+*.md.backup
+temp_output/
+test_output/
+
+# Configuration files with sensitive data
+config/projects.local.yml
+config/*.secret.yml
+
+# Output files from concatenation
+*_concatenado.md
+*_analysis.md
+output/
+
+# Logs
+*.log
+logs/config/projects.yml
+config/projects.copy.yml
+
 .venv/*
