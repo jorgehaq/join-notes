@@ -1,6 +1,6 @@
 """
-File discovery infrastructure.
-Handles finding files based on patterns and managing ignore rules.
+File discovery infrastructure v2.1.0.
+Enhanced with granular exclusions, pattern-based search, and improved performance.
 """
 
 import glob
@@ -9,178 +9,193 @@ from pathlib import Path
 from typing import List, Set, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ..domain.entities import Project, ProjectProfile, FileInfo
+from ..domain.entities import Project, ProjectProfile, FileInfo, ProjectConfiguration
 
 
-class IgnorePatternEngine:
-    """Handles .notes-ignore pattern matching using gitignore-style rules."""
+class EnhancedIgnorePatternEngine:
+    """Enhanced ignore pattern engine with global + profile-specific exclusions."""
     
-    def __init__(self, ignore_file_path: Path = None):
-        """Initialize with path to ignore file."""
-        self.ignore_file_path = ignore_file_path or Path(".notes-ignore")
-        self._patterns = self._load_ignore_patterns()
-    
-    def _load_ignore_patterns(self) -> List[str]:
-        """Load ignore patterns from file."""
-        patterns = []
+    def __init__(self, config: ProjectConfiguration, profile: ProjectProfile):
+        """Initialize with global config and profile-specific exclusions."""
+        self.global_exclude = config.global_exclude_config
+        self.profile_excludes = [Path(p).expanduser() for p in profile.not_include]
         
-        if not self.ignore_file_path.exists():
-            return patterns
-        
-        try:
-            with open(self.ignore_file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    # Skip empty lines and comments
-                    if line and not line.startswith('#'):
-                        patterns.append(line)
-        except Exception:
-            # If we can't read ignore file, continue without it
-            pass
-        
-        return patterns
-    
     def should_ignore(self, file_path: Path, base_path: Path) -> bool:
-        """Check if a file should be ignored based on patterns."""
+        """Check if a file should be ignored based on all exclusion rules."""
         relative_path = file_path.relative_to(base_path)
         
-        for pattern in self._patterns:
-            if self._matches_pattern(relative_path, pattern):
-                return True
+        # Check global folder exclusions
+        if self._matches_global_folder_patterns(relative_path):
+            return True
+        
+        # Check global file exclusions  
+        if self._matches_global_file_patterns(relative_path):
+            return True
+            
+        # Check profile-specific exclusions
+        if self._matches_profile_exclusions(file_path):
+            return True
         
         return False
     
-    def _matches_pattern(self, file_path: Path, pattern: str) -> bool:
-        """Check if file path matches a specific ignore pattern."""
-        file_str = str(file_path).replace('\\', '/')  # Normalize path separators
+    def _matches_global_folder_patterns(self, relative_path: Path) -> bool:
+        """Check if path matches global folder exclusion patterns."""
+        path_str = str(relative_path).replace('\\', '/')
         
-        # Handle different pattern types
+        for pattern in self.global_exclude.folders:
+            if self._matches_pattern(path_str, pattern):
+                return True
+                
+        return False
+    
+    def _matches_global_file_patterns(self, relative_path: Path) -> bool:
+        """Check if file matches global file exclusion patterns."""
+        path_str = str(relative_path).replace('\\', '/')
+        
+        for pattern in self.global_exclude.files:
+            if self._matches_pattern(path_str, pattern):
+                return True
+                
+        return False
+    
+    def _matches_profile_exclusions(self, file_path: Path) -> bool:
+        """Check if file matches profile-specific exclusions."""
+        for exclude_path in self.profile_excludes:
+            try:
+                # Check if file is under excluded path
+                file_path.relative_to(exclude_path)
+                return True
+            except ValueError:
+                # File is not under this excluded path
+                continue
+        
+        return False
+    
+    def _matches_pattern(self, path_str: str, pattern: str) -> bool:
+        """Check if path matches a specific pattern (glob-style)."""
+        import fnmatch
+        
         if pattern.endswith('/'):
-            # Directory pattern - check if any parent directory matches
-            pattern_without_slash = pattern[:-1]
+            # Directory pattern
+            pattern_clean = pattern[:-1]
             return any(
-                part == pattern_without_slash 
-                for part in file_path.parts
+                part == pattern_clean or fnmatch.fnmatch(part, pattern_clean)
+                for part in path_str.split('/')
             )
         
         elif '**' in pattern:
-            # Glob pattern - use fnmatch-style matching
-            import fnmatch
-            return fnmatch.fnmatch(file_str, pattern)
+            # Recursive glob pattern
+            return fnmatch.fnmatch(path_str, pattern)
         
-        elif pattern.startswith('*'):
+        elif '*' in pattern:
             # Simple wildcard
-            import fnmatch
-            return fnmatch.fnmatch(file_path.name, pattern)
+            return fnmatch.fnmatch(os.path.basename(path_str), pattern)
         
         else:
             # Exact match or substring
-            return pattern in file_str or file_path.name == pattern
+            return pattern in path_str
 
 
-class FileDiscoveryEngine:
-    """Discovers files based on project configuration and patterns."""
+class EnhancedFileDiscoveryEngine:
+    """Enhanced file discovery with pattern-based search and exclusions."""
     
-    def __init__(self, ignore_engine: IgnorePatternEngine = None):
-        """Initialize with optional custom ignore engine."""
-        self.ignore_engine = ignore_engine or IgnorePatternEngine()
+    def __init__(self, config: ProjectConfiguration):
+        """Initialize with project configuration."""
+        self.config = config
     
-    def discover_files(
-        self, 
-        project: Project, 
-        profile: ProjectProfile
-    ) -> List[Path]:
+    def discover_files(self, project: Project, profile: ProjectProfile) -> List[Path]:
         """Discover all files matching the project profile criteria."""
+        # Initialize ignore engine for this profile
+        ignore_engine = EnhancedIgnorePatternEngine(self.config, profile)
+        
+        # Expand pattern path
+        pattern_path = Path(profile.pattern).expanduser()
+        
+        if not pattern_path.exists():
+            return []
+        
         discovered_files = []
         
-        for base_path in project.expanded_base_paths:
-            if not base_path.exists():
-                continue
-            
-            # Find directories matching the pattern
-            matching_dirs = self._find_matching_directories(base_path, profile.pattern)
-            
-            # Find files in those directories
-            for directory in matching_dirs:
-                files = self._find_files_in_directory(
-                    directory, 
-                    profile.extensions,
-                    base_path
-                )
-                discovered_files.extend(files)
+        # Search for files in the pattern directory
+        if pattern_path.is_dir():
+            files = self._find_files_in_directory(
+                pattern_path, 
+                profile.extensions, 
+                ignore_engine,
+                pattern_path  # Use pattern_path as base for relative calculations
+            )
+            discovered_files.extend(files)
         
         return discovered_files
-    
-    def _find_matching_directories(self, base_path: Path, pattern: str) -> List[Path]:
-        """Find directories matching the glob pattern."""
-        search_pattern = str(base_path / pattern)
-        
-        try:
-            # Use glob to find matching paths
-            matches = glob.glob(search_pattern, recursive=True)
-            
-            # Filter to only directories that exist
-            directories = [
-                Path(match) for match in matches 
-                if Path(match).is_dir()
-            ]
-            
-            return directories
-            
-        except Exception:
-            # If glob fails, return empty list
-            return []
     
     def _find_files_in_directory(
         self, 
         directory: Path, 
         extensions: List[str],
+        ignore_engine: EnhancedIgnorePatternEngine,
         base_path: Path
     ) -> List[Path]:
         """Find files with specified extensions in a directory."""
         files = []
         
         try:
+            print(f"🔍 Scanning {directory} for extensions: {extensions}")
+            
             for file_path in directory.rglob('*'):
                 if not file_path.is_file():
                     continue
                 
+                # Debug: Print file being checked
+                if file_path.name == "README.md":
+                    print(f"🧪 Checking README.md - Extension: {file_path.suffix}")
+                
                 # Check extension match
                 if not self._matches_extension(file_path, extensions):
+                    if file_path.name == "README.md":
+                        print(f"❌ README.md rejected by extension match")
                     continue
                 
                 # Check ignore patterns
-                if self.ignore_engine.should_ignore(file_path, base_path):
+                if ignore_engine.should_ignore(file_path, base_path):
+                    if file_path.name == "README.md":
+                        print(f"❌ README.md rejected by ignore patterns")
                     continue
+                
+                if file_path.name == "README.md":
+                    print(f"✅ README.md accepted!")
                 
                 files.append(file_path)
                 
-        except Exception:
-            # If directory traversal fails, skip it
-            pass
+        except Exception as e:
+            print(f"Warning: Error scanning directory {directory}: {e}")
         
+        print(f"📊 Found {len(files)} files total")
         return files
     
     def _matches_extension(self, file_path: Path, extensions: List[str]) -> bool:
         """Check if file extension matches any in the list."""
         file_ext = file_path.suffix.lower()
+        file_name = file_path.name.lower()
         
         # Handle files without extensions
         if not file_ext and '' in extensions:
             return True
         
-        # Handle special cases like .env files
-        file_name = file_path.name.lower()
+        # Direct extension match (most common case)
+        for ext in extensions:
+            ext_lower = ext.lower()
+            if file_ext == ext_lower:
+                return True
+            
+            # Handle special cases like .env files
+            if ext_lower.startswith('.') and file_name.startswith(ext_lower.lstrip('.')):
+                return True
         
-        return any(
-            file_ext == ext.lower() or 
-            file_name.startswith(ext.lower().lstrip('.'))
-            for ext in extensions
-        )
+        return False
 
 
-class FileContentReader:
-    """Reads file content with proper encoding handling."""
+class FastFileContentReader:
+    """Enhanced file content reader with ThreadPoolExecutor from v1."""
     
     def __init__(self, max_file_size_mb: float = 5.0):
         """Initialize with maximum file size limit."""
@@ -209,7 +224,7 @@ class FileContentReader:
             
         except Exception as e:
             # Handle read errors gracefully
-            relative_path = str(file_path.relative_to(base_path))
+            relative_path = str(file_path.relative_to(base_path)) if base_path else str(file_path)
             return FileInfo(
                 relative_path=relative_path,
                 content=f"[Error reading file: {str(e)}]",
@@ -237,20 +252,20 @@ class FileContentReader:
         self, 
         file_paths: List[Path], 
         project_name: str,
-        base_paths: List[Path],
+        base_path: Path,
         max_workers: int = 4
     ) -> List[FileInfo]:
-        """Read multiple files in parallel."""
+        """Read multiple files in parallel using ThreadPoolExecutor (v1 speed)."""
         file_infos = []
+        
+        if not file_paths:
+            return file_infos
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all file reading tasks
             future_to_file = {}
             
             for file_path in file_paths:
-                # Find the appropriate base path for this file
-                base_path = self._find_base_path_for_file(file_path, base_paths)
-                
                 future = executor.submit(
                     self.read_file, 
                     file_path, 
@@ -269,16 +284,5 @@ class FileContentReader:
                     file_path = future_to_file[future]
                     print(f"Error reading {file_path}: {e}")
         
-        return file_infos
-    
-    def _find_base_path_for_file(self, file_path: Path, base_paths: List[Path]) -> Path:
-        """Find which base path contains this file."""
-        for base_path in base_paths:
-            try:
-                file_path.relative_to(base_path)
-                return base_path
-            except ValueError:
-                continue
-        
-        # If no base path found, use the file's parent
-        return file_path.parent
+        # Sort by relative path for consistent output
+        return sorted(file_infos, key=lambda x: x.relative_path)

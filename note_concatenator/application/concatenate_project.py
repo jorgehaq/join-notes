@@ -1,7 +1,6 @@
-
 """
-Application use case for concatenating project files.
-This is the main business logic that orchestrates the file discovery and concatenation process.
+Application use case for concatenating project files v2.1.0.
+Enhanced with minimalist output format and improved performance.
 """
 
 import time
@@ -15,23 +14,23 @@ from ..domain.entities import (
     ConcatenationResult,
     ProjectConfiguration
 )
-from ..infrastructure.file_discovery import FileDiscoveryEngine, FileContentReader
+from ..infrastructure.file_discovery import EnhancedFileDiscoveryEngine, FastFileContentReader
 from ..infrastructure.config_loader import load_project_configuration
 
 
 class ConcatenateProjectUseCase:
-    """Use case for concatenating files from a project profile."""
+    """Enhanced use case with minimalist output and improved performance."""
     
     def __init__(
         self,
         config: Optional[ProjectConfiguration] = None,
-        discovery_engine: Optional[FileDiscoveryEngine] = None,
-        content_reader: Optional[FileContentReader] = None
+        discovery_engine: Optional[EnhancedFileDiscoveryEngine] = None,
+        content_reader: Optional[FastFileContentReader] = None
     ):
         """Initialize with optional dependencies for testing."""
         self.config = config or load_project_configuration()
-        self.discovery_engine = discovery_engine or FileDiscoveryEngine()
-        self.content_reader = content_reader or FileContentReader(
+        self.discovery_engine = discovery_engine or EnhancedFileDiscoveryEngine(self.config)
+        self.content_reader = content_reader or FastFileContentReader(
             max_file_size_mb=self.config.max_file_size_mb
         )
     
@@ -42,7 +41,7 @@ class ConcatenateProjectUseCase:
         output_file: Optional[Path] = None,
         extensions_override: Optional[List[str]] = None
     ) -> ConcatenationResult:
-        """Execute the concatenation use case."""
+        """Execute the concatenation use case with enhanced performance."""
         start_time = time.time()
         
         # Get project configuration
@@ -53,7 +52,7 @@ class ConcatenateProjectUseCase:
         if extensions_override:
             profile.extensions = extensions_override
         
-        # Determine output file
+        # Determine output file using active output config
         output_path = self._determine_output_path(
             project_name, 
             profile, 
@@ -76,16 +75,17 @@ class ConcatenateProjectUseCase:
                 execution_time_seconds=time.time() - start_time
             )
         
-        # Read file contents
+        # Read file contents with parallel processing (v1 speed)
+        base_path = Path(profile.pattern).expanduser()
         file_infos = self.content_reader.read_files_parallel(
             discovered_files,
             project_name,
-            project.expanded_base_paths,
+            base_path,
             max_workers=self.config.settings.get("max_workers", 4)
         )
         
-        # Generate output
-        self._write_concatenated_output(
+        # Generate minimalist output
+        self._write_minimalist_output(
             file_infos,
             output_path,
             project,
@@ -147,109 +147,67 @@ class ConcatenateProjectUseCase:
         profile: ProjectProfile,
         output_file: Optional[Path]
     ) -> Path:
-        """Determine the final output file path."""
+        """Determine the final output file path using active output config."""
         if output_file:
             return output_file
         
+        # Get active output configuration
+        active_output = self.config.active_output_config
+        
+        if active_output.output_external_directory:
+            output_dir = Path(active_output.output_external_directory) / project_name
+        else:
+            output_dir = Path(active_output.output_local_directory) / project_name
+        
         # Create output directory
-        output_dir = Path(self.config.output_directory) / project_name
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Use profile output name or generate default
-        filename = profile.output or f"{project_name}_concatenated.md"
+        # Use profile output name
+        filename = profile.output
         if not filename.endswith('.md'):
             filename += '.md'
         
         return output_dir / filename
     
-    def _write_concatenated_output(
+    def _write_minimalist_output(
         self,
         file_infos: List[FileInfo],
         output_path: Path,
         project: Project,
         profile: ProjectProfile
     ) -> None:
-        """Write the concatenated output file."""
+        """Write the minimalist concatenated output file."""
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
-                # Write header
-                self._write_header(f, project, profile, file_infos)
+                # Minimalist header
+                f.write(f"# {project.name.upper()}\n\n")
+                f.write(f"**Profile:** {profile.description or profile.output}\n")
+                f.write(f"**Files:** {len(file_infos)}\n")
+                f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write("=" * 60 + "\n\n")
                 
-                # Group files by directory for better organization
-                files_by_dir = self._group_files_by_directory(file_infos)
-                
-                # Write content sections
-                for directory, files in files_by_dir.items():
-                    self._write_directory_section(f, directory, files)
+                # Write each file with minimalist format
+                for file_info in file_infos:
+                    self._write_minimalist_file_section(f, file_info)
                 
         except Exception as e:
             raise RuntimeError(f"Failed to write output file {output_path}: {e}")
     
-    def _write_header(
-        self,
-        file_handle,
-        project: Project,
-        profile: ProjectProfile,
-        file_infos: List[FileInfo]
-    ) -> None:
-        """Write the file header with project information."""
-        total_size_mb = sum(info.size_mb for info in file_infos)
-        extensions = list(set(info.extension for info in file_infos))
-        
-        file_handle.write(f"# 📋 PROJECT: {project.name.upper()}\n\n")
-        file_handle.write(f"**Description:** {project.description}\n")
-        file_handle.write(f"**Profile:** {profile.description or 'Default'}\n")
-        file_handle.write(f"**Files processed:** {len(file_infos)} files\n")
-        file_handle.write(f"**Total size:** {total_size_mb:.2f} MB\n")
-        file_handle.write(f"**Extensions:** {', '.join(sorted(extensions))}\n")
-        file_handle.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        file_handle.write("=" * 80 + "\n\n")
-    
-    def _group_files_by_directory(self, file_infos: List[FileInfo]) -> dict:
-        """Group files by their directory for organized output."""
-        files_by_dir = {}
-        
-        for file_info in sorted(file_infos, key=lambda x: x.relative_path):
-            directory = str(Path(file_info.relative_path).parent)
-            if directory == '.':
-                directory = 'root'
-            
-            if directory not in files_by_dir:
-                files_by_dir[directory] = []
-            
-            files_by_dir[directory].append(file_info)
-        
-        return files_by_dir
-    
-    def _write_directory_section(
-        self,
-        file_handle,
-        directory: str,
-        files: List[FileInfo]
-    ) -> None:
-        """Write a section for files in a specific directory."""
-        file_handle.write(f"\n## 📁 Directory: {directory}\n\n")
-        
-        for file_info in files:
-            self._write_file_section(file_handle, file_info)
-    
-    def _write_file_section(self, file_handle, file_info: FileInfo) -> None:
-        """Write a section for a single file."""
-        file_handle.write(f"### 📄 {file_info.name}\n")
-        file_handle.write(f"**Path:** `{file_info.relative_path}`\n")
-        if file_info.size_bytes:
-            file_handle.write(f"**Size:** {file_info.size_mb:.2f} MB\n")
-        file_handle.write("\n")
+    def _write_minimalist_file_section(self, file_handle, file_info: FileInfo) -> None:
+        """Write a minimalist section for a single file."""
+        # Minimalist separator
+        file_handle.write("-" * 60 + "\n")
+        file_handle.write(f"Path: {file_info.relative_path}\n\n")
         
         # Determine code block language from extension
         language = self._get_language_from_extension(file_info.extension)
         
+        # Code block with language
         file_handle.write(f"```{language}\n")
         file_handle.write(file_info.content)
         if not file_info.content.endswith('\n'):
             file_handle.write('\n')
         file_handle.write("```\n\n")
-        file_handle.write("-" * 60 + "\n\n")
     
     def _get_language_from_extension(self, extension: str) -> str:
         """Get syntax highlighting language from file extension."""

@@ -1,7 +1,6 @@
-
 """
-Modern CLI interface for the note concatenator.
-Replaces the old concat-notes.py script with a clean, extensible command structure.
+Modern CLI interface for the note concatenator v2.1.0.
+Enhanced with clean error handling and safe configuration loading.
 """
 
 import sys
@@ -23,6 +22,37 @@ from ..domain.entities import ProjectConfiguration
 console = Console()
 
 
+def _load_configuration_safe(config_path: Optional[Path] = None) -> Optional[ProjectConfiguration]:
+    """Load configuration with clean error messages for CLI."""
+    try:
+        return load_project_configuration(config_path)
+        
+    except ConfigurationError as e:
+        console.print(f"[red]❌ Configuration Error:[/red]")
+        # Clean up the error message - remove "Configuration validation failed:"
+        error_msg = str(e).replace("Configuration validation failed:\n", "")
+        console.print(error_msg)
+        return None
+        
+    except FileNotFoundError:
+        config_file = config_path or Path("config/projects.yml")
+        console.print(f"[red]❌ Configuration file not found:[/red] {config_file}")
+        console.print("[yellow]💡 Create config/projects.yml or use --config option[/yellow]")
+        return None
+        
+    except Exception as e:
+        console.print(f"[red]❌ Unexpected error:[/red] {e}")
+        return None
+
+
+def safe_load_or_exit(config_path: Optional[Path] = None) -> ProjectConfiguration:
+    """Load configuration or exit with clean error."""
+    config = _load_configuration_safe(config_path)
+    if config is None:
+        sys.exit(1)
+    return config
+
+
 @click.group(invoke_without_command=True)
 @click.option('--config', '-c', 
               type=click.Path(exists=True, path_type=Path),
@@ -32,10 +62,10 @@ console = Console()
 @click.pass_context
 def cli(ctx, config: Optional[Path], verbose: bool):
     """
-    Notes Concatenator v2.0 - Modern file aggregation tool.
+    Notes Concatenator v2.1.0 - Enhanced file aggregation tool.
     
-    Concatenate files from configured projects using smart pattern matching
-    and clean architecture principles.
+    Concatenate files from configured projects with granular exclusions,
+    flexible output settings, and clean minimalist format.
     """
     # Ensure context object exists
     ctx.ensure_object(dict)
@@ -53,13 +83,8 @@ def cli(ctx, config: Optional[Path], verbose: bool):
 @click.pass_context
 def list_projects(ctx):
     """List all available projects and their profiles."""
-    try:
-        config = _load_configuration(ctx.obj.get('config_path'))
-        _display_projects_table(config)
-        
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(1)
+    config = safe_load_or_exit(ctx.obj.get('config_path'))
+    _display_projects_table(config)
 
 
 @cli.command('concat')
@@ -91,7 +116,7 @@ def concatenate_project(
     
     try:
         # Load configuration
-        config = _load_configuration(ctx.obj.get('config_path'))
+        config = safe_load_or_exit(ctx.obj.get('config_path'))
         
         # Validate project exists
         if project_name not in config.projects:
@@ -112,9 +137,6 @@ def concatenate_project(
                 config, project_name, profile, output, extensions_list, dry_run, verbose
             )
             
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(1)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         if verbose:
@@ -126,19 +148,14 @@ def concatenate_project(
 @click.pass_context
 def validate_config(ctx):
     """Validate the project configuration file."""
-    try:
-        config = _load_configuration(ctx.obj.get('config_path'))
-        console.print("[green]✓[/green] Configuration is valid!")
-        
-        # Show summary
-        project_count = len(config.projects)
-        total_profiles = sum(len(p.profiles) for p in config.projects.values())
-        
-        console.print(f"Found {project_count} projects with {total_profiles} total profiles")
-        
-    except ConfigurationError as e:
-        console.print(f"[red]✗ Configuration error:[/red] {e}")
-        sys.exit(1)
+    config = safe_load_or_exit(ctx.obj.get('config_path'))
+    console.print("[green]✓[/green] Configuration is valid!")
+    
+    # Show summary
+    project_count = len(config.projects)
+    total_profiles = sum(len(p.profiles) for p in config.projects.values())
+    
+    console.print(f"Found {project_count} projects with {total_profiles} total profiles")
 
 
 @cli.command('info')
@@ -146,26 +163,16 @@ def validate_config(ctx):
 @click.pass_context
 def project_info(ctx, project_name: str):
     """Show detailed information about a specific project."""
-    try:
-        config = _load_configuration(ctx.obj.get('config_path'))
-        project = config.get_project(project_name)
-        
-        if not project:
-            available = ", ".join(config.list_project_names())
-            console.print(f"[red]Error:[/red] Project '{project_name}' not found.")
-            console.print(f"Available projects: {available}")
-            sys.exit(1)
-        
-        _display_project_info(project)
-        
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
+    config = safe_load_or_exit(ctx.obj.get('config_path'))
+    project = config.get_project(project_name)
+    
+    if not project:
+        available = ", ".join(config.list_project_names())
+        console.print(f"[red]Error:[/red] Project '{project_name}' not found.")
+        console.print(f"Available projects: {available}")
         sys.exit(1)
-
-
-def _load_configuration(config_path: Optional[Path]) -> ProjectConfiguration:
-    """Load and return project configuration."""
-    return load_project_configuration(config_path)
+    
+    _display_project_info(project)
 
 
 def _display_projects_table(config: ProjectConfiguration):
@@ -175,19 +182,14 @@ def _display_projects_table(config: ProjectConfiguration):
     table.add_column("Project", style="cyan", no_wrap=True)
     table.add_column("Description", style="green")
     table.add_column("Profiles", style="yellow")
-    table.add_column("Base Paths", style="blue")
     
     for project_name, project in config.projects.items():
         profiles = ", ".join(project.profiles.keys()) if project.profiles else "None"
-        base_paths = "\n".join(str(p) for p in project.base_paths[:2])  # Show first 2 paths
-        if len(project.base_paths) > 2:
-            base_paths += f"\n... and {len(project.base_paths) - 2} more"
         
         table.add_row(
             project_name,
             project.description or "No description",
-            profiles,
-            base_paths
+            profiles
         )
     
     console.print(table)
@@ -198,12 +200,6 @@ def _display_project_info(project):
     console.print(f"\n[bold cyan]Project: {project.name}[/bold cyan]")
     console.print(f"Description: {project.description or 'No description'}")
     
-    console.print(f"\n[bold]Base Paths:[/bold]")
-    for path in project.base_paths:
-        path_obj = Path(path).expanduser()
-        exists = "✓" if path_obj.exists() else "✗"
-        console.print(f"  {exists} {path}")
-    
     if project.profiles:
         console.print(f"\n[bold]Profiles:[/bold]")
         for profile_name, profile in project.profiles.items():
@@ -213,6 +209,8 @@ def _display_project_info(project):
             console.print(f"    Output: {profile.output}")
             if profile.description:
                 console.print(f"    Description: {profile.description}")
+            if profile.not_include:
+                console.print(f"    Excludes: {len(profile.not_include)} paths")
             console.print()
 
 
@@ -319,7 +317,18 @@ def _concatenate_all_profiles(
 # Entry point for the CLI
 def main():
     """Main entry point for the CLI application."""
-    cli()
+    try:
+        cli()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Operation cancelled by user[/yellow]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error:[/red] {e}")
+        console.print("\n[yellow]💡 Try:[/yellow]")
+        console.print("  - Check your config/projects.yml file")
+        console.print("  - Run: python migrate.py validate")
+        console.print("  - Use --verbose for more details")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

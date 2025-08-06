@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from note_concatenator.cli.main import main
 
+print("🚀 Using new Notes Concatenator v2.1.0 architecture")  # v2.0 → v2.1.0
+
 if __name__ == "__main__":
     # Temporary entry point for testing during development
     print("🚀 Using new Notes Concatenator v2.0 architecture")

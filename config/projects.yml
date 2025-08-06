@@ -1,39 +1,77 @@
-
-# Notes Concatenator v2.0 - Project Configuration
-# This file defines how to discover and concatenate files from your projects
+# Notes Concatenator v2.1.0 - Enhanced Configuration
+# New structure with granular exclusions and flexible output settings
 
 projects:
 
-  # Jorge 
-  real-time-test:
-    description: "FastAPI/Django backend analysis"
-    base_paths:
-      - "~/gdrive_fast/NOTES/NEW/2. PROYECTO"
-      - "~/projects/backend/python/"
-    
+  axis:
+    description: "axis insights and notes"    
     profiles:
+      coding:
+        pattern: "~/projects/backend/python/client-analytics-api-INSIGHTS/"
+        extensions: [ ".md", ".yml", ".json"]
+        output: "axis-insides.md"
+        description: "Source code analysis"
+        not-include: 
+          - "~/projects/backend/python/client-analytics-api-INSIGHTS/core/domain/events.py"
+          - "~/projects/backend/python/client-analytics-api-INSIGHTS/core/management/commands/"
+      
       insights:
-        pattern: "**/*real-time-analytics-pipeline-INSIGHTS*/**"
-        extensions: [".py", ".md", ".yml", ".json"]
+        pattern: "~/gdrive_fast/NOTES/OLD/2 PROJECTS/A. OTROS/11. JOIN-NOTES"
+        extensions: [".md"]
         output: "insights.md"
-        description: "realtime api insights"
-      
-      django:
-        pattern: "**/django-*/**"  
-        extensions: [".py", ".md", ".yml"]
-        output: "django-analysis.md"
-        description: "Django project files"
-      
-      infrastructure:
-        pattern: "**/{docker,k8s,terraform}/**"
-        extensions: [".yml", ".yaml", ".tf", ".dockerfile"]
-        output: "infrastructure.md"
-        description: "Infrastructure as code"
+        description: "Project insights and documentation"
+        not-include: []
 
-# Global settings
+  # Example: Multiple patterns project
+  join-notes:
+    description: "Concatenador version 1"
+    profiles:
+      v1:
+        pattern: "~/projects/backend/python/join-notes/"
+        extensions: [".py", ".json", ".md"]
+        output: "join-notes-v1.md"
+        description: "Version 1 join notes"
+        not-include: []
+      
+      v2:
+        pattern: "~/projects/backend/python/notes-concatenator/"
+        extensions: [".py", ".yml",".md"]
+        output: "notes-concatenador-testv2.md"
+        description: "Version 1 concatenador notes"
+        not-include: 
+          - "~/projects/backend/python/notes-concatenator/config/projects.example.yml"
+
+# Global configuration
 settings:
-  default_extensions: [".py", ".md", ".yml"]
-  output_directory: "JOINED-NOTES"
-  max_file_size: 5
+  # Internal output (local to project)
+  output-internal:
+    output_local_directory: "JOINED-NOTES"
+    active: false
+  
+  # External output (external drive/cloud)
+  output-external:
+    output_external_directory: "/home/jorgehaq_vm/gdrive_fast/JOINED-NOTES"
+    active: true
+  
+  # Global exclusion patterns
+  exclude:
+    folders: [
+      ".venv",
+      "__pycache__/",
+      "build/",
+      "**/vendor/**",
+      "**/node_modules/**",
+      "**/.git/**"
+    ]
+    files: [
+      "**/*.min.js",
+      "**/*.csv",
+      "**/*.pyc",
+      "**/*.log",
+      "**/*.tmp"
+    ]
+  
+  # Performance settings
+  max_file_size: 5.0
   parallel_processing: true
   max_workers: 4
