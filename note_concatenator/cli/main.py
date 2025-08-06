@@ -1,364 +1,326 @@
-import os
+
+"""
+Modern CLI interface for the note concatenator.
+Replaces the old concat-notes.py script with a clean, extensible command structure.
+"""
+
 import sys
-import json
-import argparse
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, List
+
+import click
+from rich.console import Console
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich import print as rprint
+
+from ..application.concatenate_project import ConcatenateProjectUseCase
+from ..infrastructure.config_loader import load_project_configuration, ConfigurationError
+from ..domain.entities import ProjectConfiguration
 
 
-@dataclass
-class ArchivoInfo:
-    ruta_relativa: str
-    contenido: str
-    nombre: str
-    proyecto_origen: str
+# Global console for rich output
+console = Console()
 
 
-def leer_archivo_individual(ruta_completa, ruta_relativa, nombre, proyecto_origen=""):
-    """Lee un archivo y retorna su info"""
+@click.group(invoke_without_command=True)
+@click.option('--config', '-c', 
+              type=click.Path(exists=True, path_type=Path),
+              help='Path to configuration file (default: config/projects.yml)')
+@click.option('--verbose', '-v', is_flag=True, 
+              help='Enable verbose output')
+@click.pass_context
+def cli(ctx, config: Optional[Path], verbose: bool):
+    """
+    Notes Concatenator v2.0 - Modern file aggregation tool.
+    
+    Concatenate files from configured projects using smart pattern matching
+    and clean architecture principles.
+    """
+    # Ensure context object exists
+    ctx.ensure_object(dict)
+    
+    # Store global options
+    ctx.obj['config_path'] = config
+    ctx.obj['verbose'] = verbose
+    
+    # If no subcommand is provided, show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@cli.command('list')
+@click.pass_context
+def list_projects(ctx):
+    """List all available projects and their profiles."""
     try:
-        with open(ruta_completa, "r", encoding="utf-8") as f:
-            contenido = f.read()
-        return ArchivoInfo(ruta_relativa, contenido, nombre, proyecto_origen)
-    except UnicodeDecodeError:
-        return ArchivoInfo(
-            ruta_relativa,
-            f"[Error: No se pudo leer el archivo {nombre}]",
-            nombre,
-            proyecto_origen,
-        )
+        config = _load_configuration(ctx.obj.get('config_path'))
+        _display_projects_table(config)
+        
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        sys.exit(1)
 
 
-def cargar_configuracion(archivo_config="projects.json"):
-    """Carga la configuración de proyectos desde JSON"""
-    try:
-        with open(archivo_config, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"❌ Error: No se encontró el archivo '{archivo_config}'")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"❌ Error al leer JSON: {e}")
-        return None
-
-
-def listar_proyectos(config):
-    """Muestra todos los proyectos disponibles"""
-    print("📋 Proyectos disponibles:")
-    print("=" * 50)
-
-    for proyecto in config["projects"]:
-        activos = sum(1 for d in proyecto["directorios"] if d["activo"])
-        total = len(proyecto["directorios"])
-
-        print(f"🔹 {proyecto['project']}")
-        print(f"   📝 {proyecto.get('description', 'Sin descripción')}")
-        print(f"   📁 {activos}/{total} directorios activos")
-        print()
-
-
-def obtener_proyecto(config, nombre_proyecto):
-    """Obtiene un proyecto específico por nombre"""
-    for proyecto in config["projects"]:
-        if proyecto["project"] == nombre_proyecto:
-            return proyecto
-    return None
-
-
-def cargar_ignorados(ruta_base):
-    """Carga archivos/carpetas a ignorar desde .notes-ignore"""
-    ignorados = set()
-    ruta_ignore = os.path.join(ruta_base, ".notes-ignore")
-    if os.path.exists(ruta_ignore):
-        with open(ruta_ignore, "r", encoding="utf-8") as f:
-            for linea in f:
-                linea = linea.strip()
-                if linea and not linea.startswith("#"):
-                    ignorados.add(os.path.normpath(linea))
-    return ignorados
-
-
-def coincide_con_patron(nombre_archivo, patron):
-    """Verifica si archivo coincide con extensión o patrón"""
-    nombre_lower = nombre_archivo.lower()
-    patron_lower = patron.lower()
-
-    # Caso 1: Extensión normal (.md, .py, .txt)
-    if nombre_lower.endswith(patron_lower):
-        return True
-
-    # Caso 2: Archivos especiales (.env -> .env.docker)
-    if patron_lower in [".env", ".config"] and nombre_lower.startswith(
-        patron_lower + "."
-    ):
-        return True
-
-    return False
-
-
-def recolectar_archivos_a_procesar(
-    directorio_raiz, ignorados, extensiones, proyecto_nombre=""
+@cli.command('concat')
+@click.argument('project_name')
+@click.option('--profile', '-p', 
+              help='Specific profile to concatenate (default: first available)')
+@click.option('--output', '-o', 
+              type=click.Path(path_type=Path),
+              help='Custom output file path')
+@click.option('--extensions', '-e', 
+              multiple=True,
+              help='File extensions to include (overrides profile settings)')
+@click.option('--all-profiles', is_flag=True,
+              help='Concatenate all profiles for the project')
+@click.option('--dry-run', is_flag=True,
+              help='Show what would be processed without actually doing it')
+@click.pass_context
+def concatenate_project(
+    ctx, 
+    project_name: str, 
+    profile: Optional[str],
+    output: Optional[Path],
+    extensions: tuple,
+    all_profiles: bool,
+    dry_run: bool
 ):
-    """Recolecta archivos con las extensiones/patrones especificados"""
-    archivos_a_procesar = []
-
-    if not os.path.exists(directorio_raiz):
-        print(f"⚠️  Directorio no existe: {directorio_raiz}")
-        return archivos_a_procesar
-
-    print(f"📁 Procesando: {directorio_raiz}")
-
-    for carpeta_actual, subcarpetas, archivos in os.walk(directorio_raiz):
-        # Filtrar subcarpetas ignoradas
-        subcarpetas[:] = [sc for sc in subcarpetas if not debe_ignorar_carpeta(sc)]
-
-        ruta_rel_carpeta = os.path.relpath(carpeta_actual, directorio_raiz)
-
-        if ruta_rel_carpeta != "." and esta_ignorado(ruta_rel_carpeta, ignorados):
-            continue
-
-        for archivo in sorted(archivos):
-            if any(coincide_con_patron(archivo, ext) for ext in extensiones):
-                ruta_completa = os.path.join(carpeta_actual, archivo)
-                ruta_relativa = os.path.relpath(ruta_completa, directorio_raiz)
-
-                if not esta_ignorado(ruta_relativa, ignorados):
-                    archivos_a_procesar.append(
-                        (ruta_completa, ruta_relativa, archivo, proyecto_nombre)
-                    )
-
-    return archivos_a_procesar
-
-
-def debe_ignorar_carpeta(nombre_carpeta):
-    """Ignora automáticamente carpetas comunes que no queremos"""
-    carpetas_ignoradas = {
-        ".venv",
-        "__pycache__",
-        ".git",
-        ".pytest_cache",
-        "node_modules",
-        ".idea",
-        ".vscode",
-        "venv",
-        "env",
-        ".mypy_cache",
-    }
-    return nombre_carpeta in carpetas_ignoradas
-
-
-def esta_ignorado(path_relativo, ignorados):
-    path_relativo = os.path.normpath(path_relativo)
-
-    # Ignorar coincidencia exacta
-    if path_relativo in ignorados:
-        return True
-
-    # Ignorar si cualquier ruta ignorada es un prefijo de la ruta relativa
-    for patron in ignorados:
-        patron_normalizado = os.path.normpath(patron)
-        if path_relativo.startswith(patron_normalizado):
-            return True
-
-    return False
-
-
-
-def crear_directorio_proyecto(
-    proyecto_nombre, ruta_base="/home/jorgehaq_vm/gdrive_fast/JOINED-NOTES"
-):
-    """Crea el directorio del proyecto si no existe"""
-    directorio_proyecto = os.path.join(ruta_base, proyecto_nombre)
-
+    """Concatenate files from a specific project."""
+    verbose = ctx.obj.get('verbose', False)
+    
     try:
-        os.makedirs(directorio_proyecto, exist_ok=True)
-        print(f"📁 Directorio preparado: {directorio_proyecto}")
-        return directorio_proyecto
+        # Load configuration
+        config = _load_configuration(ctx.obj.get('config_path'))
+        
+        # Validate project exists
+        if project_name not in config.projects:
+            available = ", ".join(config.list_project_names())
+            console.print(f"[red]Error:[/red] Project '{project_name}' not found.")
+            console.print(f"Available projects: {available}")
+            sys.exit(1)
+        
+        # Convert extensions tuple to list
+        extensions_list = list(extensions) if extensions else None
+        
+        if all_profiles:
+            _concatenate_all_profiles(
+                config, project_name, extensions_list, dry_run, verbose
+            )
+        else:
+            _concatenate_single_profile(
+                config, project_name, profile, output, extensions_list, dry_run, verbose
+            )
+            
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"❌ Error creando directorio: {e}")
-        return None
+        console.print(f"[red]Error:[/red] {e}")
+        if verbose:
+            console.print_exception()
+        sys.exit(1)
 
 
-def concatenar_proyecto(proyecto, salida, extensiones):
-    """Concatena todos los directorios activos de un proyecto"""
+@cli.command('validate')
+@click.pass_context
+def validate_config(ctx):
+    """Validate the project configuration file."""
+    try:
+        config = _load_configuration(ctx.obj.get('config_path'))
+        console.print("[green]✓[/green] Configuration is valid!")
+        
+        # Show summary
+        project_count = len(config.projects)
+        total_profiles = sum(len(p.profiles) for p in config.projects.values())
+        
+        console.print(f"Found {project_count} projects with {total_profiles} total profiles")
+        
+    except ConfigurationError as e:
+        console.print(f"[red]✗ Configuration error:[/red] {e}")
+        sys.exit(1)
 
-    print(f"🚀 Procesando proyecto: {proyecto['project']}")
-    print(f"📝 Descripción: {proyecto.get('description', 'Sin descripción')}")
-    print("=" * 60)
 
-    todos_los_archivos = []
+@cli.command('info')
+@click.argument('project_name')
+@click.pass_context
+def project_info(ctx, project_name: str):
+    """Show detailed information about a specific project."""
+    try:
+        config = _load_configuration(ctx.obj.get('config_path'))
+        project = config.get_project(project_name)
+        
+        if not project:
+            available = ", ".join(config.list_project_names())
+            console.print(f"[red]Error:[/red] Project '{project_name}' not found.")
+            console.print(f"Available projects: {available}")
+            sys.exit(1)
+        
+        _display_project_info(project)
+        
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        sys.exit(1)
 
-    for directorio_info in proyecto["directorios"]:
-        if not directorio_info["activo"]:
-            print(f"⏸️  Saltando (inactivo): {directorio_info['path']}")
-            continue
 
-        directorio_raiz = directorio_info["path"]
-        ignorados = cargar_ignorados(directorio_raiz)
+def _load_configuration(config_path: Optional[Path]) -> ProjectConfiguration:
+    """Load and return project configuration."""
+    return load_project_configuration(config_path)
 
-        archivos_del_directorio = recolectar_archivos_a_procesar(
-            directorio_raiz, ignorados, extensiones, proyecto["project"]
+
+def _display_projects_table(config: ProjectConfiguration):
+    """Display a formatted table of all projects."""
+    table = Table(title="Available Projects", show_header=True, header_style="bold magenta")
+    
+    table.add_column("Project", style="cyan", no_wrap=True)
+    table.add_column("Description", style="green")
+    table.add_column("Profiles", style="yellow")
+    table.add_column("Base Paths", style="blue")
+    
+    for project_name, project in config.projects.items():
+        profiles = ", ".join(project.profiles.keys()) if project.profiles else "None"
+        base_paths = "\n".join(str(p) for p in project.base_paths[:2])  # Show first 2 paths
+        if len(project.base_paths) > 2:
+            base_paths += f"\n... and {len(project.base_paths) - 2} more"
+        
+        table.add_row(
+            project_name,
+            project.description or "No description",
+            profiles,
+            base_paths
         )
-
-        todos_los_archivos.extend(archivos_del_directorio)
-        print(f"   ✅ Encontrados: {len(archivos_del_directorio)} archivos")
-
-    if not todos_los_archivos:
-        extensiones_str = ", ".join(extensiones)
-        print(f"⚠️  No se encontraron archivos con extensiones: {extensiones_str}")
-        return False
-
-    print(f"\n📦 Total archivos a procesar: {len(todos_los_archivos)}")
-
-    # Leer todos los archivos en paralelo
-    archivos_contenido = []
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [
-            executor.submit(
-                leer_archivo_individual,
-                ruta_completa,
-                ruta_relativa,
-                nombre,
-                proyecto_origen,
-            )
-            for ruta_completa, ruta_relativa, nombre, proyecto_origen in todos_los_archivos
-        ]
-
-        for future in futures:
-            archivos_contenido.append(future.result())
-
-    # Escribir todo de una vez
-    try:
-        with open(salida, "w", encoding="utf-8") as archivo_salida:
-            # Header del proyecto
-            archivo_salida.write(f"# 📋 PROYECTO: {proyecto['project'].upper()}\n\n")
-            archivo_salida.write(
-                f"**Descripción:** {proyecto.get('description', 'Sin descripción')}\n"
-            )
-            archivo_salida.write(
-                f"**Generado:** {len(archivos_contenido)} archivos concatenados\n"
-            )
-            archivo_salida.write(f"**Extensiones:** {', '.join(extensiones)}\n\n")
-            archivo_salida.write("=" * 80 + "\n\n")
-
-            directorio_actual = ""
-            for info in archivos_contenido:
-                # Separador por directorio
-                directorio_archivo = os.path.dirname(info.ruta_relativa)
-                if directorio_archivo != directorio_actual:
-                    directorio_actual = directorio_archivo
-                    archivo_salida.write(
-                        f"\n## 📁 Directorio: {directorio_archivo}\n\n"
-                    )
-
-                archivo_salida.write(f"### 📄 {info.nombre}\n")
-                archivo_salida.write(f"**Ruta:** `{info.ruta_relativa}`\n\n")
-                archivo_salida.write("```\n")
-                archivo_salida.write(info.contenido)
-                archivo_salida.write("\n```\n\n")
-                archivo_salida.write("-" * 60 + "\n\n")
-
-    except Exception as e:
-        print(f"❌ Error al escribir: {e}")
-        return False
-
-    print(f"✅ Proyecto concatenado exitosamente en: {salida}")
-    return True
+    
+    console.print(table)
 
 
+def _display_project_info(project):
+    """Display detailed information about a specific project."""
+    console.print(f"\n[bold cyan]Project: {project.name}[/bold cyan]")
+    console.print(f"Description: {project.description or 'No description'}")
+    
+    console.print(f"\n[bold]Base Paths:[/bold]")
+    for path in project.base_paths:
+        path_obj = Path(path).expanduser()
+        exists = "✓" if path_obj.exists() else "✗"
+        console.print(f"  {exists} {path}")
+    
+    if project.profiles:
+        console.print(f"\n[bold]Profiles:[/bold]")
+        for profile_name, profile in project.profiles.items():
+            console.print(f"  [yellow]{profile_name}[/yellow]")
+            console.print(f"    Pattern: {profile.pattern}")
+            console.print(f"    Extensions: {', '.join(profile.extensions)}")
+            console.print(f"    Output: {profile.output}")
+            if profile.description:
+                console.print(f"    Description: {profile.description}")
+            console.print()
+
+
+def _concatenate_single_profile(
+    config: ProjectConfiguration,
+    project_name: str,
+    profile_name: Optional[str],
+    output_path: Optional[Path],
+    extensions: Optional[List[str]],
+    dry_run: bool,
+    verbose: bool
+):
+    """Concatenate a single profile from a project."""
+    use_case = ConcatenateProjectUseCase(config)
+    
+    if dry_run:
+        console.print(f"[yellow]DRY RUN:[/yellow] Would concatenate project '{project_name}'")
+        if profile_name:
+            console.print(f"Profile: {profile_name}")
+        if extensions:
+            console.print(f"Extensions: {', '.join(extensions)}")
+        if output_path:
+            console.print(f"Output: {output_path}")
+        return
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True
+    ) as progress:
+        task = progress.add_task("Discovering and processing files...", total=None)
+        
+        result = use_case.execute(
+            project_name=project_name,
+            profile_name=profile_name,
+            output_file=output_path,
+            extensions_override=extensions
+        )
+    
+    if result.success:
+        console.print(f"[green]✓[/green] Successfully concatenated {result.total_files} files")
+        console.print(f"Output: {result.output_file}")
+        console.print(f"Size: {result.total_size_mb:.2f} MB")
+        console.print(f"Time: {result.execution_time_seconds:.2f}s")
+        
+        if verbose:
+            console.print(f"Extensions found: {', '.join(result.extensions_found)}")
+    else:
+        console.print("[yellow]Warning:[/yellow] No files found matching criteria")
+
+
+def _concatenate_all_profiles(
+    config: ProjectConfiguration,
+    project_name: str,
+    extensions: Optional[List[str]],
+    dry_run: bool,
+    verbose: bool
+):
+    """Concatenate all profiles for a project."""
+    project = config.get_project(project_name)
+    
+    if not project.profiles:
+        console.print(f"[yellow]Warning:[/yellow] No profiles defined for project '{project_name}'")
+        return
+    
+    console.print(f"Processing all profiles for project '{project_name}':")
+    
+    use_case = ConcatenateProjectUseCase(config)
+    
+    for profile_name in project.profiles.keys():
+        if dry_run:
+            console.print(f"[yellow]DRY RUN:[/yellow] Would process profile '{profile_name}'")
+            continue
+        
+        console.print(f"\n[cyan]Processing profile:[/cyan] {profile_name}")
+        
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn(f"[progress.description]{{task.description}}"),
+                console=console,
+                transient=True
+            ) as progress:
+                task = progress.add_task(f"Processing {profile_name}...", total=None)
+                
+                result = use_case.execute(
+                    project_name=project_name,
+                    profile_name=profile_name,
+                    extensions_override=extensions
+                )
+            
+            if result.success:
+                console.print(f"  ✓ {result.total_files} files → {result.output_file.name}")
+            else:
+                console.print(f"  [yellow]No files found for profile '{profile_name}'[/yellow]")
+                
+        except Exception as e:
+            console.print(f"  [red]Error in profile '{profile_name}':[/red] {e}")
+            if verbose:
+                console.print_exception()
+
+
+# Entry point for the CLI
 def main():
-    parser = argparse.ArgumentParser(
-        description="Concatena notas de proyectos configurados"
-    )
-    parser.add_argument("proyecto", nargs="?", help="Nombre del proyecto a concatenar")
-    parser.add_argument(
-        "--list",
-        "-l",
-        action="store_true",
-        help="Lista todos los proyectos disponibles",
-    )
-    parser.add_argument(
-        "--config",
-        "-c",
-        default="projects.json",
-        help="Archivo de configuración (default: projects.json)",
-    )
-    parser.add_argument(
-        "--output", "-o", help="Archivo de salida (default: {proyecto}_concatenado.md)"
-    )
-    parser.add_argument(
-        "--extensions",
-        "-e",
-        nargs="+",
-        default=["md", "py", "txt", "json", "yml", "Dockerfile", "sh", ".env"],
-        help="Extensiones de archivos a incluir",
-    )
-
-    args = parser.parse_args()
-
-    # Cargar configuración
-    config = cargar_configuracion(args.config)
-    if not config:
-        return 1
-
-    # Listar proyectos si se solicita
-    if args.list:
-        listar_proyectos(config)
-        return 0
-
-    # Validar que se especificó un proyecto
-    if not args.proyecto:
-        print("❌ Error: Debes especificar un proyecto o usar --list para ver opciones")
-        parser.print_help()
-        return 1
-
-    # Obtener proyecto
-    proyecto = obtener_proyecto(config, args.proyecto)
-    if not proyecto:
-        print(f"❌ Error: Proyecto '{args.proyecto}' no encontrado")
-        print("\n💡 Usa --list para ver proyectos disponibles")
-        return 1
-
-    # Normalizar extensiones
-    extensiones_normalizadas = []
-    for ext in args.extensions:
-        if not ext.startswith("."):
-            ext = "." + ext
-        extensiones_normalizadas.append(ext.lower())
-
-    # Determinar archivo de salida
-    if args.output:
-        salida = args.output
-    else:
-        salida = f"{args.proyecto}_concatenado.md"
-
-    # Concatenar proyecto
-    # exito = concatenar_proyecto(proyecto, salida, extensiones_normalizadas)
-
-    # Crear directorio del proyecto
-    directorio_destino = crear_directorio_proyecto(args.proyecto)
-    if not directorio_destino:
-        return 1
-
-    # Determinar archivo de salida dentro del directorio del proyecto
-    if args.output:
-        # Si especifica nombre personalizado
-        nombre_archivo = (
-            args.output if args.output.endswith(".md") else f"{args.output}.md"
-        )
-    else:
-        # Nombre por defecto
-        nombre_archivo = f"{args.proyecto}_concatenado.md"
-
-    salida = os.path.join(directorio_destino, nombre_archivo)
-
-    print(f"📝 Archivo destino: {salida}")
-
-    # Concatenar proyecto
-    exito = concatenar_proyecto(proyecto, salida, extensiones_normalizadas)
-
-    return 0 if exito else 1
+    """Main entry point for the CLI application."""
+    cli()
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == '__main__':
+    main()
