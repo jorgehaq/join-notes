@@ -1,6 +1,7 @@
+
 """
-Domain entities for the note concatenator.
-These are the core business objects that represent our domain concepts.
+Domain entities for the note concatenator v2.1.0.
+Enhanced with granular exclusions and flexible output settings.
 """
 
 from dataclasses import dataclass
@@ -32,13 +33,33 @@ class FileInfo:
         return self.size_bytes / (1024 * 1024)
 
 
+class OutputConfig(BaseModel):
+    """Configuration for output directory settings."""
+    
+    output_local_directory: str = Field(default="JOINED-NOTES")
+    output_external_directory: str = Field(default="")
+    active: bool = Field(default=True)
+
+
+class GlobalExcludeConfig(BaseModel):
+    """Global exclusion patterns."""
+    
+    folders: List[str] = Field(default_factory=lambda: [
+        ".venv", "__pycache__/", "build/", "**/vendor/**"
+    ])
+    files: List[str] = Field(default_factory=lambda: [
+        "**/*.min.js", "**/*.csv", "**/*.pyc"
+    ])
+
+
 class ProjectProfile(BaseModel):
     """Represents a specific view/profile of a project."""
     
-    pattern: str = Field(..., description="Glob pattern to match directories")
+    pattern: str = Field(..., description="Directory pattern to search")
     extensions: List[str] = Field(default_factory=lambda: [".py", ".md", ".yml"])
     output: str = Field(..., description="Output filename")
     description: str = Field(default="", description="Profile description")
+    not_include: List[str] = Field(default_factory=list, description="Paths to exclude")
     
     def matches_extension(self, file_extension: str) -> bool:
         """Check if file extension matches this profile."""
@@ -50,7 +71,6 @@ class Project(BaseModel):
     
     name: str = Field(..., description="Project name/identifier")
     description: str = Field(default="", description="Project description")
-    base_paths: List[str] = Field(..., description="Base directories to search")
     profiles: dict[str, ProjectProfile] = Field(default_factory=dict)
     
     def get_profile(self, profile_name: str) -> Optional[ProjectProfile]:
@@ -62,16 +82,6 @@ class Project(BaseModel):
         if not self.profiles:
             return None
         return next(iter(self.profiles.values()))
-    
-    @property
-    def expanded_base_paths(self) -> List[Path]:
-        """Get base paths with environment variables expanded."""
-        expanded = []
-        for path_str in self.base_paths:
-            # Expand ~ and environment variables
-            expanded_path = Path(path_str).expanduser()
-            expanded.append(expanded_path)
-        return expanded
 
 
 class ProjectConfiguration(BaseModel):
@@ -89,19 +99,37 @@ class ProjectConfiguration(BaseModel):
         return list(self.projects.keys())
     
     @property
-    def default_extensions(self) -> List[str]:
-        """Get default file extensions from settings."""
-        return self.settings.get("default_extensions", [".py", ".md", ".yml"])
+    def output_internal_config(self) -> OutputConfig:
+        """Get internal output configuration."""
+        internal = self.settings.get("output-internal", {})
+        return OutputConfig(**internal)
+    
+    @property
+    def output_external_config(self) -> OutputConfig:
+        """Get external output configuration."""
+        external = self.settings.get("output-external", {})
+        return OutputConfig(**external)
+    
+    @property
+    def active_output_config(self) -> OutputConfig:
+        """Get the currently active output configuration."""
+        internal = self.output_internal_config
+        external = self.output_external_config
+        
+        if external.active:
+            return external
+        return internal
+    
+    @property
+    def global_exclude_config(self) -> GlobalExcludeConfig:
+        """Get global exclusion configuration."""
+        exclude = self.settings.get("exclude", {})
+        return GlobalExcludeConfig(**exclude)
     
     @property
     def max_file_size_mb(self) -> float:
         """Get maximum file size limit in MB."""
         return self.settings.get("max_file_size", 5.0)
-    
-    @property
-    def output_directory(self) -> str:
-        """Get output directory for concatenated files."""
-        return self.settings.get("output_directory", "JOINED-NOTES")
 
 
 class ConcatenationResult(BaseModel):
