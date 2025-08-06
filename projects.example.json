@@ -1,5 +1,6 @@
 {
   "projects": [
+  
     {
       "project": "enterprise-analysis",
       "description": "Enterprise code analysis project",
