@@ -81,3 +81,6 @@ logs/config/projects.yml
 config/projects.copy.yml
 
 .venv/*
+
+# Ignore settings files
+config/projects.dev.yml
